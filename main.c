@@ -6,24 +6,10 @@
 
 extern int printf(const char* fmt, ...);
 
-static long strlen(const char* str)
-{
-    long i = 0;
-    while (str[i]) { ++i; }
-    return i;
-}
-
 static char* strcpy(char* dst, const char* src)
 {
     while ((*dst++ = *src++));
-    return dst;
-}
-
-static char* strcat(char* dst, const char* src)
-{
-    while (*dst) { ++dst; }
-    while ((*dst++ = *src++));
-    return dst;
+    return --dst;
 }
 
 static char* lex(const char* str, long* iter)
@@ -87,94 +73,86 @@ static int oppres(const char* op)
     return 16;
 }
 
-static void op2(char* dst, const char* op)
+static char* op2(char* dst, const char* op)
 {
     static long labelcount = 1;
     switch(*op) {
         case '+': 
-            strcat(dst, "\tpop %rdx\n\tpop %rax\n\tadd %rdx, %rax\n");
+            dst = strcpy(dst, "\tpop %rdx\n\tpop %rax\n\tadd %rdx, %rax\n");
             break;
         case '-': 
-            strcat(dst, "\tpop %rdx\n\tpop %rax\n\tsub %rdx, %rax\n");
+            dst = strcpy(dst, "\tpop %rdx\n\tpop %rax\n\tsub %rdx, %rax\n");
             break;
         case '/': 
-            strcat(dst, "\tpop %rcx\n\tpop %rax\n\txor %rdx, %rdx\n\tidiv %rcx\n");
+            dst = strcpy(dst, "\tpop %rcx\n\tpop %rax\n\txor %rdx, %rdx\n\tidiv %rcx\n");
             break;
         case '*': 
-            strcat(dst, "\tpop %rdx\n\tpop %rax\n\timul %rdx, %rax\n");
+            dst = strcpy(dst, "\tpop %rdx\n\tpop %rax\n\timul %rdx, %rax\n");
             break;
         case '%': 
-            strcat(dst, "\tpop %rcx\n\tpop %rax\n\txor %rdx, %rdx\n\tidiv %rcx\n");
+            dst = strcpy(dst, "\tpop %rcx\n\tpop %rax\n\txor %rdx, %rdx\n\tidiv %rcx\n");
             break;
         case '^':
-            strcat(dst, "\tpop %rdx\n\tpop %rax\n\txor %rdx, %rax\n");
+            dst = strcpy(dst, "\tpop %rdx\n\tpop %rax\n\txor %rdx, %rax\n");
             break;
         case '=':
-            strcat(dst, "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
-            strcat(dst, "\tcmp %rdx, %rcx\n\tsete %al\n");
+            dst = strcpy(dst, "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
+            dst = strcpy(dst, "\tcmp %rdx, %rcx\n\tsete %al\n");
             break;
         case '!':
-            strcat(dst, "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
-            strcat(dst, "\tcmp %rdx, %rcx\n\tsetne %al\n");
+            dst = strcpy(dst, "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
+            dst = strcpy(dst, "\tcmp %rdx, %rcx\n\tsetne %al\n");
             break;
         case '>':
-            if (*op == op[1]) { 
-                strcat(dst, "\tpop %rcx\n\tpop %rax\n\tshr %cl, %rax\n");
+            if (*op != op[1]) { 
+                dst = strcpy(dst, "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
+                dst = strcpy(dst, "\tcmp %rdx, %rcx\n\tsetg");
+                *dst++ = 'e' * (op[1] == '=');
+                dst = strcpy(dst, " %al\n");
             }
-            else {
-                strcat(dst, "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
-                strcat(dst, "\tcmp %rdx, %rcx\n\tsetg");
-                dst[strlen(dst)] = 'e' * (op[1] == '=');
-                strcat(dst, " %al\n");
-            }
+            else dst = strcpy(dst, "\tpop %rcx\n\tpop %rax\n\tshr %cl, %rax\n");
             break;
         case '<':
-            if (*op == op[1]) { 
-                strcat(dst, "\tpop %rcx\n\tpop %rax\n\tshl %cl, %rax\n");
+            if (*op != op[1]) { 
+                dst = strcpy(dst, "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
+                dst = strcpy(dst, "\tcmp %rdx, %rcx\n\tsetl");
+                *dst++ = 'e' * (op[1] == '=');
+                dst = strcpy(dst, " %al\n");
             }
-            else {
-                strcat(dst, "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
-                strcat(dst, "\tcmp %rdx, %rcx\n\tsetl");
-                dst[strlen(dst)] = 'e' * (op[1] == '=');
-                strcat(dst, " %al\n");
-            }
+            else dst = strcpy(dst, "\tpop %rcx\n\tpop %rax\n\tshl %cl, %rax\n");
             break;
         case '&':
             if (*op == op[1]) {
-                strcat(
-                    dst,
-                    "\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n\ttest %rcx, %rcx\n\tje L"
-                );
-                dst[strlen(dst)] = labelcount + '0';
-                strcat(dst, "\n\ttest %rdx, %rdx\n\tje L");
-                dst[strlen(dst)] = labelcount + '0';
-                strcat(dst, "\n\tinc %rax\nL");
-                dst[strlen(dst)] = labelcount + '0';
-                strcat(dst, ":\n");
+                dst = strcpy(dst,"\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
+                dst = strcpy(dst, "\ttest %rcx, %rcx\n\tje L");
+                *dst++ = labelcount + '0';
+                dst = strcpy(dst, "\n\ttest %rdx, %rdx\n\tje L");
+                *dst++ = labelcount + '0';
+                dst = strcpy(dst, "\n\tinc %rax\nL");
+                *dst++ = labelcount + '0';
+                dst = strcpy(dst, ":\n");
                 ++labelcount;
             }
-            else strcat(dst, "\tpop %rdx\n\tpop %rax\n\tand %rdx, %rax\n");
+            else dst = strcpy(dst, "\tpop %rdx\n\tpop %rax\n\tand %rdx, %rax\n");
             break;
         case '|':
             if (*op == op[1]) {
-                strcat(
-                    dst,
-                    "\tpop %rdx\n\tpop %rcx\n\tmov $1, %rax\n\ttest %rcx, %rcx\n\tjne L"
-                );
-                dst[strlen(dst)] = labelcount + '0';
-                strcat(dst, "\n\ttest %rdx, %rdx\n\tjne L");
-                dst[strlen(dst)] = labelcount + '0';
-                strcat(dst, "\n\tdec %rax\nL");
-                dst[strlen(dst)] = labelcount + '0';
-                strcat(dst, ":\n");
+                dst = strcpy(dst, "\tpop %rdx\n\tpop %rcx\n\tmov $1, %rax\n");
+                dst =strcpy(dst, "\ttest %rcx, %rcx\n\tjne L");
+                *dst++ = labelcount + '0';
+                dst = strcpy(dst, "\n\ttest %rdx, %rdx\n\tjne L");
+                *dst++ = labelcount + '0';
+                dst = strcpy(dst, "\n\tdec %rax\nL");
+                *dst++ = labelcount + '0';
+                dst = strcpy(dst, ":\n");
                 ++labelcount;
             }
-            else strcat(dst, "\tpop %rdx\n\tpop %rax\n\tor %rdx, %rax\n");
+            else dst = strcpy(dst, "\tpop %rdx\n\tpop %rax\n\tor %rdx, %rax\n");
             break;
     }
-    strcat(dst, "\tpush %r");
-    dst[strlen(dst)] = *op == '%' ? 'd' : 'a';
-    strcat(dst, "x\n");
+    dst = strcpy(dst, "\tpush %r");
+    *dst++ = 'a' + 3 * (*op == '%');
+    return strcpy(dst, "x\n");
 }
 
 static int compile(char* dst, const char* src)
@@ -182,35 +160,35 @@ static int compile(char* dst, const char* src)
     long stackcount = 0, i = 0, j;
     char* tok = lex(src, &i), stack[0xff][4];
     
-    strcpy(dst, ".section __TEXT, __text\n\t.globl _main\n_main:\n");
+    dst = strcpy(dst, ".section __TEXT, __text\n\t.globl _main\n_main:\n");
     
     while (tok) {
         switch (*tok) {
             case 0:
                 break;
             case '0' ... '9':
-                strcat(dst, "\tmov $");
-                strcat(dst, tok);
-                strcat(dst, ", %rax\n\tpush %rax\n");
+                dst = strcpy(dst, "\tmov $");
+                dst = strcpy(dst, tok);
+                dst = strcpy(dst, ", %rax\n\tpush %rax\n");
                 break;
             case '(':
                 strcpy(stack[stackcount++], tok);
                 break;
             case ')':
                 while (stackcount && *stack[stackcount - 1] != '(') {
-                    op2(dst, stack[--stackcount]);
+                    dst = op2(dst, stack[--stackcount]);
                 }
                 stackcount = stackcount ? stackcount - 1: stackcount;
                 break;
             default:
-                printf("# '%s' -> ", tok);
+                /*printf("# '%s' -> ", tok);
                 for (j = 0; j < stackcount; ++j) {
                     printf("'%s' ", stack[j]);    
                 }
-                printf("\n");
+                printf("\n");*/
                 while (stackcount && *stack[stackcount - 1] != '(' && 
                     oppres(tok) >= oppres(stack[stackcount - 1])) {
-                    op2(dst, stack[--stackcount]);
+                    dst = op2(dst, stack[--stackcount]);
                 }
                 strcpy(stack[stackcount++], tok);
         }
@@ -218,10 +196,10 @@ static int compile(char* dst, const char* src)
     }
 
     while (stackcount) {
-        op2(dst, stack[--stackcount]);
+        dst = op2(dst, stack[--stackcount]);
     }
 
-    strcat(dst, "\tpop %rax\n\tret\n");
+    dst = strcpy(dst, "\tpop %rax\n\tret\n");
 
     return EXIT_SUCCESS;
 }
