@@ -73,6 +73,25 @@ static int oppres(const char* op)
     return 16;
 }
 
+static char* op1(char* dst, const char* op)
+{
+    switch (*op) {
+        case '!':
+            dst = strcpy(dst, "\txor %rax, %rax\n\tpop %rcx\n\ttest %rcx, %rcx\n");
+            dst = strcpy(dst, "\tsete %al\n");
+            break;
+        case '~':
+            dst = strcpy(dst, "\tpop %rax\n\tnot %rax\n");
+            break;
+        case '-':
+            dst = strcpy(dst, "\tpop %rax\n\tneg %rax\n");
+            break;
+        case '+': 
+            return dst;
+    }
+    return strcpy(dst, "\tpush %rax\n");
+}
+
 static char* op2(char* dst, const char* op)
 {
     static long labelcount = 1;
@@ -126,9 +145,7 @@ static char* op2(char* dst, const char* op)
                 dst = strcpy(dst,"\tpop %rdx\n\tpop %rcx\n\txor %rax, %rax\n");
                 dst = strcpy(dst, "\ttest %rcx, %rcx\n\tje L");
                 *dst++ = labelcount + '0';
-                dst = strcpy(dst, "\n\ttest %rdx, %rdx\n\tje L");
-                *dst++ = labelcount + '0';
-                dst = strcpy(dst, "\n\tinc %rax\nL");
+                dst = strcpy(dst, "\n\ttest %rdx, %rdx\n\tsetne %al\nL");
                 *dst++ = labelcount + '0';
                 dst = strcpy(dst, ":\n");
                 ++labelcount;
@@ -138,11 +155,9 @@ static char* op2(char* dst, const char* op)
         case '|':
             if (*op == op[1]) {
                 dst = strcpy(dst, "\tpop %rdx\n\tpop %rcx\n\tmov $1, %rax\n");
-                dst =strcpy(dst, "\ttest %rcx, %rcx\n\tjne L");
+                dst = strcpy(dst, "\ttest %rcx, %rcx\n\tjne L");
                 *dst++ = labelcount + '0';
-                dst = strcpy(dst, "\n\ttest %rdx, %rdx\n\tjne L");
-                *dst++ = labelcount + '0';
-                dst = strcpy(dst, "\n\tdec %rax\nL");
+                dst = strcpy(dst, "\n\ttest %rdx, %rdx\n\tsetne %al\nL");
                 *dst++ = labelcount + '0';
                 dst = strcpy(dst, ":\n");
                 ++labelcount;
@@ -157,7 +172,7 @@ static char* op2(char* dst, const char* op)
 
 static int compile(char* dst, const char* src)
 {
-    long stackcount = 0, i = 0, j;
+    long stackcount = 0, i = 0, n = 1;
     char* tok = lex(src, &i), stack[0xff][4];
     
     dst = strcpy(dst, ".section __TEXT, __text\n\t.globl _main\n_main:\n");
@@ -170,9 +185,15 @@ static int compile(char* dst, const char* src)
                 dst = strcpy(dst, "\tmov $");
                 dst = strcpy(dst, tok);
                 dst = strcpy(dst, ", %rax\n\tpush %rax\n");
+                while (n > 1) {
+                    dst = op1(dst, stack[--stackcount]);
+                    --n;
+                }
+                n = 0;
                 break;
             case '(':
                 strcpy(stack[stackcount++], tok);
+                ++n;
                 break;
             case ')':
                 while (stackcount && *stack[stackcount - 1] != '(') {
@@ -187,10 +208,11 @@ static int compile(char* dst, const char* src)
                 }
                 printf("\n");*/
                 while (stackcount && *stack[stackcount - 1] != '(' && 
-                    oppres(tok) >= oppres(stack[stackcount - 1])) {
+                    oppres(tok) >= oppres(stack[stackcount - 1]) && !n) {
                     dst = op2(dst, stack[--stackcount]);
                 }
                 strcpy(stack[stackcount++], tok);
+                ++n;
         }
         tok = lex(src, &i);
     }
